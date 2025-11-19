@@ -1,13 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Settings, Check, Calendar, ChevronRight, Sparkles, Minus, Plus, Smile, Frown, Meh, ThumbsUp, Star, BookOpen, User, Trophy, TrendingUp } from 'lucide-react';
+import { Settings, Check, Calendar, ChevronRight, Sparkles, Minus, Plus, Smile, Frown, Meh, ThumbsUp, Star, BookOpen, User, Trophy, TrendingUp, Tag } from 'lucide-react';
 
 // --- 設定エリア ---
-// ★最新の正しいGAS URL
-const GAS_API_URL = "https://script.google.com/macros/s/AKfycbyJwz58qKGsfyhPwDuC4trywvP-EQFQ-w8RsiCussWwaAtpDNdiYePmmkOCZJLKvfWu/exec";
-// ★あなたのLIFF ID
+const GAS_API_URL = "https://script.google.com/macros/s/AKfycbzPiR5BIWFZkRIkZHJe5XZgBUmZvF_MdlPfOoPEbMeBe1bySt5c7lTI299p-ISpLfxG/exec";
 const LIFF_ID = "2008532121-MoQwYDkG";
 
-// --- マスターデータ (省略なし) ---
+// --- マスターデータ ---
 const SCHOOL_TYPES = [
   { id: 'elem', label: '小学生', color: 'text-orange-500', icon: '🎒' },
   { id: 'junior', label: '中学生', color: 'text-sky-500', icon: '🏫' },
@@ -43,6 +41,26 @@ const SUBJECT_DATA = {
   ]
 };
 
+// 単元データ（簡易版：必要に応じて拡張してください）
+// keyは "学年ID_科目名" の形式でマッチングさせます
+const UNIT_DATA = {
+  // 高校数学
+  'high_数学I': ['数と式', '集合と命題', '二次関数', '図形と計量', 'データの分析'],
+  'high_数学A': ['場合の数', '確率', '図形の性質', '整数の性質'],
+  'high_数学II': ['式と証明', '複素数と方程式', '図形と方程式', '三角関数', '指数・対数', '微分・積分'],
+  'high_数学B': ['数列', 'ベクトル', '統計的な推測'],
+  // 高校英語
+  'high_英語': ['時制', '助動詞', '仮定法', '不定詞', '動名詞', '分詞', '関係詞', '比較', '長文読解'],
+  'high_英単語': ['Target1900', 'シス単', 'LEAP', '速読英単語', 'その他'],
+  'high_英文法': ['Vintage', 'NextStage', 'Scramble', 'Polaris', 'その他'],
+  // 中学数学
+  'junior_数学': ['正負の数', '文字式', '方程式', '比例反比例', '平面図形', '空間図形', '式の計算', '連立方程式', '一次関数', '図形の性質', '確率', '多項式', '平方根', '二次方程式', '二次関数', '相似', '円', '三平方'],
+  // 中学英語
+  'junior_英語': ['be動詞', '一般動詞', '進行形', '未来形', '助動詞', '不定詞', '動名詞', '比較', '受動態', '現在完了', '関係代名詞'],
+  // 小学校算数
+  'elem_算数': ['たし算・ひき算', 'かけ算', 'わり算', '小数', '分数', '図形', '単位量', '比例', '速さ'],
+};
+
 const EVALUATIONS = [
   { value: 1, icon: Frown, color: 'text-slate-400' },
   { value: 2, icon: Meh, color: 'text-slate-400' },
@@ -59,16 +77,23 @@ export default function App() {
   const [errorMsg, setErrorMsg] = useState('');
 
   const [activeTab, setActiveTab] = useState(0); 
+
   const [commonDate, setCommonDate] = useState(new Date().toISOString().split('T')[0]);
   const [subject, setSubject] = useState('');
   const [activity, setActivity] = useState('self');
-  
+  const [selectedUnits, setSelectedUnits] = useState([]); // 複数選択用
+
   const [studyTime, setStudyTime] = useState(60);
   const [testScore, setTestScore] = useState(80);
   const [testMax, setTestMax] = useState(100);
   const [testInputMode, setTestInputMode] = useState('score');
   const [examScore, setExamScore] = useState(50);
   const [understanding, setUnderstanding] = useState(3);
+
+  // 科目が変わったら単元選択をリセット
+  useEffect(() => {
+    setSelectedUnits([]);
+  }, [subject]);
 
   // --- 初期化 ---
   useEffect(() => {
@@ -139,25 +164,38 @@ export default function App() {
     touchEndX.current = null;
   };
 
-  // --- 爆速送信ロジック (修正版) ---
-  // 1. UI更新と送信処理を分離
-  // 2. 送信は非同期で投げっぱなしにする
+  // --- アクション ---
+
+  const selectGrade = (gradeId) => {
+    setUserConfig({ ...userConfig, grade: gradeId });
+    setView('subject_select');
+  };
+
+  const saveConfig = (subjects) => {
+    if (subjects.length === 0) {
+      alert("科目を1つ以上選んでください");
+      return;
+    }
+    const newConfig = { ...userConfig, subjects };
+    localStorage.setItem('mieruka_config_final', JSON.stringify(newConfig));
+    setUserConfig(newConfig);
+    setView('main');
+  };
+
   const handleSubmit = async () => {
     if (!subject) return;
 
-    // ID取得 (未取得なら再トライ)
+    setSubmitState('submitting');
+    
     let currentUserId = liffUserId;
     if (!currentUserId && window.liff?.isLoggedIn()) {
        try {
          const profile = await window.liff.getProfile();
          currentUserId = profile.userId;
          setLiffUserId(profile.userId);
-       } catch (e) { 
-          console.error("ID Get Error", e);
-       }
+       } catch (e) { console.error(e); }
     }
 
-    // 送信データ構築
     let payload = {
       line_user_id: currentUserId || 'guest',
       grade: userConfig.grade,
@@ -165,6 +203,7 @@ export default function App() {
       subject: subject,
       activity: activity,
       understanding: understanding,
+      units: selectedUnits.join(','), // 複数単元をカンマ区切りで送信
     };
 
     if (activeTab === 0) {
@@ -179,29 +218,25 @@ export default function App() {
       payload.deviation = examScore;
     }
     
-    // ★ここが爆速の肝: 先に「成功」にしてしまう
     setSubmitState('success');
-
-    // 0.8秒後にリセットして次の入力待機へ
     setTimeout(() => {
       setSubject(''); 
+      setSelectedUnits([]); // 単元もリセット
       setStudyTime(60);
       setTestScore(80);
       setTestMax(100);
       setExamScore(50);
       setUnderstanding(3);
       setSubmitState('idle');
+      setErrorMsg('');
     }, 800); 
 
-    // 裏側でこっそり送信 (awaitしない！)
     fetch(GAS_API_URL, {
       method: 'POST',
       mode: 'no-cors',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     }).catch(err => console.error("Background Send Error:", err));
-    
-    // ユーザーにはもう完了画面を見せているので、ここで処理終了
   };
 
   const handleResetConfig = () => {
@@ -213,6 +248,53 @@ export default function App() {
   };
 
   // --- UI Components ---
+
+  // 単元選択コンポーネント
+  const UnitSelector = () => {
+    // 現在の学年と科目に対応する単元リストを取得
+    // マッチしなければ空配列
+    const key = `${userConfig.grade}_${subject}`;
+    // 完全一致がなければ、科目名だけで前方一致などを試す簡易ロジック（必要に応じて拡張）
+    let units = UNIT_DATA[key] || [];
+    
+    // データがない場合は汎用的なものを出すか、何も出さない
+    if (units.length === 0) return null;
+
+    const toggleUnit = (unit) => {
+      if (selectedUnits.includes(unit)) {
+        setSelectedUnits(selectedUnits.filter(u => u !== unit));
+      } else {
+        setSelectedUnits([...selectedUnits, unit]);
+      }
+    };
+
+    return (
+      <div className="mb-6 animate-in fade-in slide-in-from-top-2">
+        <div className="flex items-center gap-1 text-xs font-bold text-slate-400 mb-2 ml-1">
+           <Tag size={12} /> 単元 (複数選択可)
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {units.map(unit => {
+            const isActive = selectedUnits.includes(unit);
+            return (
+              <button
+                key={unit}
+                onClick={() => toggleUnit(unit)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all active:scale-95 ${
+                  isActive 
+                  ? 'bg-slate-700 border-slate-700 text-white shadow-sm' 
+                  : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'
+                }`}
+              >
+                {isActive && <Check size={12} className="inline mr-1 -mt-0.5" strokeWidth={3} />}
+                {unit}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
 
   const ControlButtons = ({ onSmallMinus, onBigMinus, onSmallPlus, onBigPlus, stepSmall, stepBig, colorClass }) => (
     <div className="flex flex-col gap-3 max-w-xs mx-auto mt-6 select-none">
@@ -324,7 +406,7 @@ export default function App() {
     </div>
   );
 
-  // ... (GradeSelectView, SubjectSelectView は変更なし)
+  // ... (GradeSelectView, SubjectSelectView は変更なしのため省略せず記述)
   const GradeSelectView = () => (
     <div className="h-full bg-white flex flex-col items-center justify-center p-6 animate-in fade-in">
       <div className="mb-12 text-center">
@@ -444,6 +526,11 @@ export default function App() {
             </div>
             {!subject && <p className="text-center text-xs text-slate-300 font-bold animate-pulse">科目をタップ</p>}
           </div>
+
+          {/* 単元選択 (追加) - 科目が選択されたら表示 */}
+          {subject && (activeTab === 0 || activeTab === 1) && (
+             <UnitSelector />
+          )}
 
           {/* 活動タグ */}
           <div className="mb-4">
