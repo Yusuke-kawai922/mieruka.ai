@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Settings, Check, Calendar, ChevronRight, Sparkles, Minus, Plus, Smile, Frown, Meh, ThumbsUp, Star, BookOpen } from 'lucide-react';
 
 // --- 設定エリア ---
-const GAS_API_URL = "https://script.google.com/macros/s/AKfycbxHGwTgRbFCbTk7XOfb3K-_kujygZER-xuFETeeHdFtGBneUEWb6K18kYIhfa9TpJ7p/exec";
+const GAS_API_URL = "https://script.google.com/macros/s/AKfycbzEUZNzcElKFGcjoBai3ot2S7dkMaq5WSxz-k_2oP4UEvHPdwTjrpb7xi8B1Z8Boki8/exec";
 const LIFF_ID = "2008532121-MoQwYDkG";
 
 // --- マスターデータ ---
