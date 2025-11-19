@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Settings, Check, Calendar, ChevronRight, Sparkles, Minus, Plus, Smile, Frown, Meh, ThumbsUp, Star, BookOpen } from 'lucide-react';
 
-// --- 設定: あなたのGAS URL (埋め込み済み) ---
+// --- 設定エリア ---
 const GAS_API_URL = "https://script.google.com/macros/s/AKfycbxHGwTgRbFCbTk7XOfb3K-_kujygZER-xuFETeeHdFtGBneUEWb6K18kYIhfa9TpJ7p/exec";
+const LIFF_ID = "2008532121-MoQwYDkG";
 
 // --- マスターデータ ---
 const SCHOOL_TYPES = [
@@ -11,7 +12,6 @@ const SCHOOL_TYPES = [
   { id: 'high', label: '高校生', color: 'text-indigo-500', icon: '🎓' },
 ];
 
-// 活動タグ
 const ACTIVITIES = [
   { id: 'self', label: '自習', icon: '🏠', color: 'bg-slate-100 text-slate-500 border-slate-200' },
   { id: 'juku', label: '塾・予備校', icon: '🏫', color: 'bg-pink-50 text-pink-500 border-pink-200' },
@@ -21,7 +21,6 @@ const ACTIVITIES = [
   { id: 'moshi', label: '模試', icon: '📊', color: 'bg-purple-50 text-purple-500 border-purple-200' },
 ];
 
-// 科目データ
 const SUBJECT_DATA = {
   elem: [
     { category: 'きょうか', items: ['国語', '算数', '理科', '社会', '英語', '生活', '音楽', '図工', '家庭', '体育', '道徳'] },
@@ -42,7 +41,6 @@ const SUBJECT_DATA = {
   ]
 };
 
-// 評価アイコン
 const EVALUATIONS = [
   { value: 1, icon: Frown, color: 'text-slate-400' },
   { value: 2, icon: Meh, color: 'text-slate-400' },
@@ -55,9 +53,8 @@ export default function App() {
   const [view, setView] = useState('loading'); 
   const [userConfig, setUserConfig] = useState({ grade: '', subjects: [] });
   const [submitState, setSubmitState] = useState('idle');
-  
-  // LIFF ID取得用（今回は簡易的に実装）
   const [liffUserId, setLiffUserId] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
 
   const [logData, setLogData] = useState({
     date: new Date().toISOString().split('T')[0],
@@ -67,18 +64,9 @@ export default function App() {
     understanding: 3,
   });
 
-  // --- 初期化 ---
+  // --- 初期化処理 ---
   useEffect(() => {
-    /* LIFF初期化が必要な場合はコメントアウトを外して設定してください
-       import('@line/liff').then(liff => {
-         liff.init({ liffId: "YOUR_LIFF_ID" }).then(() => {
-           if (liff.isLoggedIn()) {
-              liff.getProfile().then(profile => setLiffUserId(profile.userId));
-           }
-         });
-       });
-    */
-
+    // 1. 設定の読み込み
     const savedConfig = localStorage.getItem('mieruka_config_final');
     if (savedConfig) {
       const parsed = JSON.parse(savedConfig);
@@ -87,6 +75,33 @@ export default function App() {
     } else {
       setView('grade_select');
     }
+
+    // 2. LIFFの初期化 (CDN方式で動的に読み込む)
+    const script = document.createElement('script');
+    script.src = 'https://static.line-scdn.net/liff/edge/2/sdk.js';
+    script.onload = () => {
+      if (window.liff) {
+        window.liff.init({ liffId: LIFF_ID })
+          .then(() => {
+            if (window.liff.isLoggedIn()) {
+              window.liff.getProfile()
+                .then(profile => {
+                  setLiffUserId(profile.userId);
+                  console.log("LIFF Login Success:", profile.userId);
+                })
+                .catch(err => console.error("Profile Error:", err));
+            } else {
+              // ログインしていない場合、ログインを促す
+              // window.liff.login(); 
+              console.log("Not logged in");
+            }
+          })
+          .catch((err) => {
+            console.error("LIFF Init Error:", err);
+          });
+      }
+    };
+    document.body.appendChild(script);
   }, []);
 
   // --- アクション ---
@@ -107,48 +122,48 @@ export default function App() {
     setView('main');
   };
 
-  // データ送信処理
   const handleSubmit = async () => {
     if (!logData.subject) return;
 
     setSubmitState('submitting');
 
+    // 送信データの作成
     const payload = {
       ...logData,
-      line_user_id: liffUserId || 'test_user', // LIFF ID またはテスト用ID
+      line_user_id: liffUserId || 'guest_user', // LIFF IDが取れなければゲスト扱い
       grade: userConfig.grade,
     };
     
-    console.log("Sending to GAS:", payload);
+    console.log("Sending:", payload);
 
     try {
-      // GASへのPOST送信
+      // GASへの送信
       await fetch(GAS_API_URL, {
         method: 'POST',
-        mode: 'no-cors',
+        mode: 'no-cors', // CORS回避
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(payload),
       });
 
-      // 成功時の演出とリセット
+      // 成功処理
       setSubmitState('success');
       setTimeout(() => {
         setLogData(prev => ({
           ...prev,
-          subject: '', // 科目だけリセットして連続入力を容易に
+          subject: '', 
           minutes: 30, 
           understanding: 3
-          // activity（塾など）は維持したほうが便利なのでリセットしない
         }));
         setSubmitState('idle');
-      }, 800);
+      }, 1000);
 
     } catch (error) {
-      console.error("Error sending log:", error);
-      alert("通信エラーが発生しました。");
+      console.error("Error:", error);
+      setErrorMsg('送信に失敗しました。通信環境を確認してください。');
       setSubmitState('idle');
+      setTimeout(() => setErrorMsg(''), 3000);
     }
   };
 
@@ -166,7 +181,6 @@ export default function App() {
     <div className="h-full bg-white flex flex-col items-center justify-center p-6 animate-in fade-in">
       <div className="mb-12 text-center">
          <div className="relative w-24 h-24 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-6 border border-slate-100 shadow-sm overflow-hidden">
-            {/* アイコン: 本＋光の演出 */}
             <BookOpen size={50} className="text-slate-400 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
             <div className="absolute top-1 right-1 p-1 bg-yellow-300 rounded-full animate-pulse-lightbulb"></div>
             <div className="absolute top-0 right-0 h-full w-full bg-gradient-to-br from-transparent via-transparent to-white opacity-20"></div>
@@ -261,7 +275,6 @@ export default function App() {
 
     return (
       <div className="h-full bg-white text-slate-800 flex flex-col relative">
-        {/* Header */}
         <div className="px-6 pt-8 pb-2 flex justify-between items-center">
           <div className="relative">
              <Calendar size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
@@ -279,7 +292,7 @@ export default function App() {
 
         <div className="flex-1 overflow-y-auto pb-32 pt-2 px-5 flex flex-col justify-center min-h-[60vh]">
           
-          {/* 1. 科目 */}
+          {/* 科目 */}
           <div className="mb-6">
             <div className="flex flex-wrap justify-center gap-2 mb-4">
               {userConfig.subjects.map(sub => {
@@ -304,7 +317,7 @@ export default function App() {
             )}
           </div>
 
-          {/* 2. 活動タグ */}
+          {/* 活動タグ */}
           <div className="mb-10">
             <div className="flex flex-wrap justify-center gap-2">
                {ACTIVITIES.map(act => {
@@ -328,7 +341,7 @@ export default function App() {
             </div>
           </div>
 
-          {/* 3. 時間 */}
+          {/* 時間 */}
           <div className="mb-10 text-center">
             <div className="flex items-baseline justify-center gap-1 mb-6">
               <span className="text-7xl font-black text-slate-800 tabular-nums tracking-tight">
@@ -356,7 +369,7 @@ export default function App() {
             </div>
           </div>
 
-          {/* 4. 理解度 */}
+          {/* 理解度 */}
           <div className="mb-4 px-4">
             <div className="flex justify-between max-w-xs mx-auto bg-slate-50 p-2 rounded-2xl border border-slate-100">
               {EVALUATIONS.map((ev) => {
@@ -382,6 +395,11 @@ export default function App() {
 
         {/* Submit Button */}
         <div className="fixed bottom-0 left-0 right-0 p-5 bg-gradient-to-t from-white via-white to-transparent z-20">
+           {errorMsg && (
+              <div className="mb-2 text-center text-xs text-red-500 font-bold animate-pulse bg-red-50 p-2 rounded-lg">
+                {errorMsg}
+              </div>
+            )}
           <button
             onClick={handleSubmit}
             disabled={submitState !== 'idle' || !logData.subject}
