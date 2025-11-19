@@ -117,27 +117,47 @@ export default function App() {
     }
   }, []);
 
-  // --- スワイプ処理 ---
-  const touchStartX = useRef(0);
-  const touchEndX = useRef(0);
+  // --- 誤動作しないスワイプ処理 ---
+  const touchStartX = useRef(null);
+  const touchStartY = useRef(null);
+  const touchEndX = useRef(null);
+  const touchEndY = useRef(null);
+  const MIN_SWIPE_DISTANCE = 50; // この距離以上動かないとスワイプとみなさない
 
   const handleTouchStart = (e) => {
-    touchStartX.current = e.changedTouches[0].screenX;
+    touchStartX.current = e.targetTouches[0].clientX;
+    touchStartY.current = e.targetTouches[0].clientY;
+    // タッチ開始時に終了座標をリセット（超重要：これがタップ誤動作を防ぐ）
+    touchEndX.current = null;
+    touchEndY.current = null;
   };
 
   const handleTouchMove = (e) => {
-    touchEndX.current = e.changedTouches[0].screenX;
+    touchEndX.current = e.targetTouches[0].clientX;
+    touchEndY.current = e.targetTouches[0].clientY;
   };
 
   const handleTouchEnd = () => {
-    const distance = touchStartX.current - touchEndX.current;
-    const SWIPE_THRESHOLD = 50;
+    if (!touchStartX.current || !touchEndX.current) return;
+
+    const distanceX = touchStartX.current - touchEndX.current;
+    const distanceY = touchStartY.current - touchEndY.current;
     
-    if (distance > SWIPE_THRESHOLD) {
-      if (activeTab < 2) setActiveTab(activeTab + 1);
-    } else if (distance < -SWIPE_THRESHOLD) {
-      if (activeTab > 0) setActiveTab(activeTab - 1);
+    // 横方向の移動が閾値を超えていて、かつ縦方向の移動よりも大きい場合のみスワイプとみなす
+    // (斜めスクロールや縦スクロール時の誤動作防止)
+    if (Math.abs(distanceX) > MIN_SWIPE_DISTANCE && Math.abs(distanceX) > Math.abs(distanceY)) {
+       if (distanceX > 0) {
+         // 左スワイプ -> 次へ
+         if (activeTab < 2) setActiveTab(activeTab + 1);
+       } else {
+         // 右スワイプ -> 前へ
+         if (activeTab > 0) setActiveTab(activeTab - 1);
+       }
     }
+    
+    // リセット
+    touchStartX.current = null;
+    touchEndX.current = null;
   };
 
   // --- アクション ---
@@ -237,18 +257,18 @@ export default function App() {
   const ControlButtons = ({ onSmallMinus, onBigMinus, onSmallPlus, onBigPlus, stepSmall, stepBig, colorClass }) => (
     <div className="flex flex-col gap-3 max-w-xs mx-auto mt-6">
       <div className="flex justify-center gap-3">
-          <button onClick={onSmallPlus} className={`flex-1 py-3 rounded-xl bg-white border-2 border-slate-100 text-slate-600 font-bold active:scale-95 transition-all shadow-sm flex justify-center items-center gap-1`}>
+          <button onClick={onSmallPlus} className={`flex-1 py-3 rounded-xl bg-white border-2 border-slate-100 text-slate-600 font-bold active:scale-95 transition-all shadow-sm flex justify-center items-center gap-1 touch-manipulation`}>
             <Plus size={16} /> {stepSmall}
           </button>
-          <button onClick={onBigPlus} className={`flex-1 py-3 rounded-xl ${colorClass.replace('text-', 'bg-')} text-white font-bold active:scale-95 transition-all shadow-lg flex justify-center items-center gap-1`}>
+          <button onClick={onBigPlus} className={`flex-1 py-3 rounded-xl ${colorClass.replace('text-', 'bg-')} text-white font-bold active:scale-95 transition-all shadow-lg flex justify-center items-center gap-1 touch-manipulation`}>
             <Plus size={20} /> {stepBig}
           </button>
       </div>
       <div className="flex justify-center gap-3">
-          <button onClick={onSmallMinus} className={`flex-1 py-3 rounded-xl bg-white border-2 border-slate-100 text-slate-400 font-bold active:scale-95 transition-all shadow-sm flex justify-center items-center gap-1`}>
+          <button onClick={onSmallMinus} className={`flex-1 py-3 rounded-xl bg-white border-2 border-slate-100 text-slate-400 font-bold active:scale-95 transition-all shadow-sm flex justify-center items-center gap-1 touch-manipulation`}>
             <Minus size={16} /> {stepSmall}
           </button>
-          <button onClick={onBigMinus} className={`flex-1 py-3 rounded-xl bg-slate-100 text-slate-500 font-bold active:scale-95 transition-all flex justify-center items-center gap-1`}>
+          <button onClick={onBigMinus} className={`flex-1 py-3 rounded-xl bg-slate-100 text-slate-500 font-bold active:scale-95 transition-all flex justify-center items-center gap-1 touch-manipulation`}>
             <Minus size={16} /> {stepBig}
           </button>
       </div>
@@ -272,7 +292,7 @@ export default function App() {
         stepSmall={10} stepBig={30} colorClass="text-slate-800"
       />
       <div className="flex justify-center gap-2 mt-4">
-          {[30, 60, 90].map(m => (<button key={m} onClick={() => setStudyTime(m)} className="w-8 h-8 rounded-full border border-slate-100 text-[10px] font-bold text-slate-400 hover:bg-slate-50">{m}</button>))}
+          {[30, 60, 90].map(m => (<button key={m} onClick={() => setStudyTime(m)} className="w-8 h-8 rounded-full border border-slate-100 text-[10px] font-bold text-slate-400 hover:bg-slate-50 touch-manipulation">{m}</button>))}
       </div>
     </div>
   );
@@ -296,7 +316,7 @@ export default function App() {
           {/* 点数 (タップ可能) */}
           <div 
             onClick={() => setTestInputMode('score')}
-            className={`transition-all duration-300 cursor-pointer flex flex-col items-center ${isScoreMode ? 'scale-110 opacity-100' : 'scale-90 opacity-40 blur-[1px]'}`}
+            className={`transition-all duration-300 cursor-pointer flex flex-col items-center touch-manipulation ${isScoreMode ? 'scale-110 opacity-100' : 'scale-90 opacity-40 blur-[1px]'}`}
           >
             <span className="text-xs font-bold text-orange-500 mb-1">SCORE</span>
             <span className="text-6xl font-black text-orange-500 tabular-nums tracking-tight leading-none">{testScore}</span>
@@ -307,7 +327,7 @@ export default function App() {
           {/* 満点 (タップ可能) */}
           <div 
             onClick={() => setTestInputMode('max')}
-            className={`transition-all duration-300 cursor-pointer flex flex-col items-center ${!isScoreMode ? 'scale-110 opacity-100' : 'scale-90 opacity-40 blur-[1px]'}`}
+            className={`transition-all duration-300 cursor-pointer flex flex-col items-center touch-manipulation ${!isScoreMode ? 'scale-110 opacity-100' : 'scale-90 opacity-40 blur-[1px]'}`}
           >
             <span className="text-xs font-bold text-slate-500 mb-1">MAX</span>
             <span className="text-5xl font-bold text-slate-600 tabular-nums tracking-tight leading-none">{testMax}</span>
@@ -354,7 +374,6 @@ export default function App() {
          <div className="relative w-24 h-24 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-6 border border-slate-100 shadow-sm overflow-hidden">
             <BookOpen size={50} className="text-slate-400 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
             <div className="absolute top-1 right-1 p-1 bg-yellow-300 rounded-full animate-pulse-lightbulb"></div>
-            <div className="absolute top-0 right-0 h-full w-full bg-gradient-to-br from-transparent via-transparent to-white opacity-20"></div>
          </div>
          <h1 className="text-lg font-bold text-slate-800">学年を選択</h1>
       </div>
