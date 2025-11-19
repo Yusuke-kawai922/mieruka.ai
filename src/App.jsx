@@ -95,22 +95,17 @@ export default function App() {
       script.src = 'https://static.line-scdn.net/liff/edge/2/sdk.js';
       script.onload = async () => {
         if (window.liff) {
-          window.liff.init({ liffId: LIFF_ID })
-            .then(() => {
-              if (window.liff.isLoggedIn()) {
-                window.liff.getProfile()
-                  .then(profile => {
-                    setLiffUserId(profile.userId);
-                    console.log("LIFF Login Success:", profile.userId);
-                  })
-                  .catch(err => console.error("Profile Error:", err));
-              } else {
-                window.liff.login(); 
-              }
-            })
-            .catch((err) => {
-              console.error("LIFF Init Error:", err);
-            });
+          try {
+            await window.liff.init({ liffId: LIFF_ID });
+            if (!window.liff.isLoggedIn()) {
+              window.liff.login();
+              return;
+            }
+            const profile = await window.liff.getProfile();
+            setLiffUserId(profile.userId);
+          } catch (err) {
+            console.error("LIFF Error:", err);
+          }
         }
       };
       document.body.appendChild(script);
@@ -177,8 +172,18 @@ export default function App() {
 
     setSubmitState('submitting');
 
+    let currentUserId = liffUserId;
+    if (!currentUserId && window.liff?.isLoggedIn()) {
+       try {
+         const profile = await window.liff.getProfile();
+         currentUserId = profile.userId;
+         setLiffUserId(profile.userId);
+       } catch (e) { console.error(e); }
+    }
+
+    // 送信データの作成 (タブによって内容を変える)
     let payload = {
-      line_user_id: liffUserId || 'guest_user',
+      line_user_id: currentUserId || 'guest_user',
       grade: userConfig.grade,
       date: commonDate,
       subject: subject,
@@ -218,6 +223,7 @@ export default function App() {
 
       setSubmitState('success');
       setTimeout(() => {
+        // 送信後リセット
         setSubject('');
         setStudyTime(60);
         setTestScore(80);
@@ -503,7 +509,7 @@ export default function App() {
             </div>
           </div>
 
-          {/* 入力エリア (タブに応じて切り替え) */}
+          {/* 入力エリア */}
           <div className="relative min-h-[300px]">
             {activeTab === 0 && <div className="animate-in fade-in slide-in-from-right-4 duration-300"><StudyTimeAdjuster /></div>}
             {activeTab === 1 && <div className="animate-in fade-in slide-in-from-right-4 duration-300"><TestScoreAdjuster /></div>}
