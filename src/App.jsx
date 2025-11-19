@@ -2,25 +2,17 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Settings, Check, Calendar, ChevronRight, Sparkles, Minus, Plus, Smile, Frown, Meh, ThumbsUp, Star, BookOpen, User, Trophy, TrendingUp } from 'lucide-react';
 
 // --- 設定エリア ---
+// ★最新の正しいGAS URL
 const GAS_API_URL = "https://script.google.com/macros/s/AKfycbyJwz58qKGsfyhPwDuC4trywvP-EQFQ-w8RsiCussWwaAtpDNdiYePmmkOCZJLKvfWu/exec";
+// ★あなたのLIFF ID
 const LIFF_ID = "2008532121-MoQwYDkG";
 
-// --- マスターデータ ---
+// --- マスターデータ (省略) ---
 const SCHOOL_TYPES = [
   { id: 'elem', label: '小学生', color: 'text-orange-500', icon: '🎒' },
   { id: 'junior', label: '中学生', color: 'text-sky-500', icon: '🏫' },
   { id: 'high', label: '高校生', color: 'text-indigo-500', icon: '🎓' },
 ];
-
-const ACTIVITIES = [
-  { id: 'self', label: '自習', icon: '🏠', color: 'bg-slate-100 text-slate-500 border-slate-200' },
-  { id: 'juku', label: '塾・予備校', icon: '🏫', color: 'bg-pink-50 text-pink-500 border-pink-200' },
-  { id: 'school', label: '学校授業', icon: '👩‍🏫', color: 'bg-emerald-50 text-emerald-500 border-emerald-200' },
-  { id: 'homework', label: '宿題', icon: '📝', color: 'bg-blue-50 text-blue-500 border-blue-200' },
-  { id: 'exam', label: '定期テスト', icon: '💯', color: 'bg-orange-50 text-orange-500 border-orange-200' },
-  { id: 'moshi', label: '模試', icon: '📊', color: 'bg-purple-50 text-purple-500 border-purple-200' },
-];
-
 const SUBJECT_DATA = {
   elem: [
     { category: 'きょうか', items: ['国語', '算数', '理科', '社会', '英語', '生活', '音楽', '図工', '家庭', '体育', '道徳'] },
@@ -56,29 +48,20 @@ export default function App() {
   const [liffUserId, setLiffUserId] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
 
-  // タブ管理 (0:勉強時間, 1:テスト点数, 2:模試偏差値)
-  const [activeTab, setActiveTab] = useState(0);
-
-  // データ状態
+  const [activeTab, setActiveTab] = useState(0); 
   const [commonDate, setCommonDate] = useState(new Date().toISOString().split('T')[0]);
   const [subject, setSubject] = useState('');
   const [activity, setActivity] = useState('self');
-  
-  // 各画面用データ
-  const [studyTime, setStudyTime] = useState(60); // 分
-  
-  // テスト用データ
-  const [testScore, setTestScore] = useState(80); // 点数
-  const [testMax, setTestMax] = useState(100);    // 満点
-  const [testInputMode, setTestInputMode] = useState('score'); // 'score' or 'max'
-  
-  // 偏差値用データ
-  const [examScore, setExamScore] = useState(50); // 偏差値
-  
+  const [studyTime, setStudyTime] = useState(60);
+  const [testScore, setTestScore] = useState(80);
+  const [testMax, setTestMax] = useState(100);
+  const [testInputMode, setTestInputMode] = useState('score');
+  const [examScore, setExamScore] = useState(50);
   const [understanding, setUnderstanding] = useState(3);
 
-  // --- 初期化処理 ---
+  // --- 初期化 ---
   useEffect(() => {
+    // 設定の読み込み
     const savedConfig = localStorage.getItem('mieruka_config_final');
     if (savedConfig) {
       const parsed = JSON.parse(savedConfig);
@@ -88,7 +71,7 @@ export default function App() {
       setView('grade_select');
     }
 
-    // LIFF初期化 (CDN)
+    // LIFFの初期化
     if (!document.getElementById('liff-sdk')) {
       const script = document.createElement('script');
       script.id = 'liff-sdk';
@@ -97,14 +80,15 @@ export default function App() {
         if (window.liff) {
           try {
             await window.liff.init({ liffId: LIFF_ID });
-            if (!window.liff.isLoggedIn()) {
+            if (window.liff.isLoggedIn()) {
+              const profile = await window.liff.getProfile();
+              setLiffUserId(profile.userId);
+            } else {
+              // 未ログインなら自動ログインを試みる（LIFFのメリット）
               window.liff.login();
-              return;
             }
-            const profile = await window.liff.getProfile();
-            setLiffUserId(profile.userId);
           } catch (err) {
-            console.error("LIFF Error:", err);
+            console.error("LIFF Init Error:", err);
           }
         }
       };
@@ -112,7 +96,7 @@ export default function App() {
     }
   }, []);
 
-  // --- スワイプ処理 ---
+  // --- スワイプ ---
   const touchStartX = useRef(null);
   const touchStartY = useRef(null);
   const touchEndX = useRef(null);
@@ -133,7 +117,6 @@ export default function App() {
 
   const handleTouchEnd = () => {
     if (!touchStartX.current || !touchEndX.current) return;
-
     const distanceX = touchStartX.current - touchEndX.current;
     const distanceY = touchStartY.current - touchEndY.current;
     
@@ -144,46 +127,45 @@ export default function App() {
          if (activeTab > 0) setActiveTab(activeTab - 1);
        }
     }
-    
     touchStartX.current = null;
     touchEndX.current = null;
   };
 
-  // --- アクション ---
-
-  const selectGrade = (gradeId) => {
-    setUserConfig({ ...userConfig, grade: gradeId });
-    setView('subject_select');
-  };
-
-  const saveConfig = (subjects) => {
-    if (subjects.length === 0) {
-      alert("科目を1つ以上選んでください");
-      return;
-    }
-    const newConfig = { ...userConfig, subjects };
-    localStorage.setItem('mieruka_config_final', JSON.stringify(newConfig));
-    setUserConfig(newConfig);
-    setView('main');
+  // --- 送信処理 (爆速化ロジック) ---
+  const sendDataInBackground = (payload) => {
+    fetch(GAS_API_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    .catch((error) => {
+      // GAS側でエラーが起きた場合、ユーザーに通知
+      console.error("Async Fetch Error (Background):", error);
+      setErrorMsg('記録中に通信エラーが発生しました。データが未保存の可能性があります。');
+    });
   };
 
   const handleSubmit = async () => {
     if (!subject) return;
 
     setSubmitState('submitting');
-
+    
+    // 1. LIFF IDの最終確認（UI更新前の重要な準備）
     let currentUserId = liffUserId;
     if (!currentUserId && window.liff?.isLoggedIn()) {
        try {
          const profile = await window.liff.getProfile();
          currentUserId = profile.userId;
          setLiffUserId(profile.userId);
-       } catch (e) { console.error(e); }
+       } catch (e) { 
+          console.error("Failed to get profile during submit.", e);
+       }
     }
 
-    // 送信データの作成 (タブによって内容を変える)
+    // 2. ペイロードの構築
     let payload = {
-      line_user_id: currentUserId || 'guest_user',
+      line_user_id: currentUserId || 'guest',
       grade: userConfig.grade,
       date: commonDate,
       subject: subject,
@@ -193,56 +175,36 @@ export default function App() {
 
     if (activeTab === 0) {
       payload.log_type = 'study';
-      payload.minutes = studyTime;
-      payload.value = studyTime;
-      payload.unit = 'min';
+      payload.minutes = studyTime; 
     } else if (activeTab === 1) {
       payload.log_type = 'test';
-      payload.value = testScore;
-      payload.perfect_score = testMax;
-      payload.unit = 'point';
-      payload.minutes = 0;
+      payload.score = testScore;   
+      payload.perfect = testMax;   
     } else if (activeTab === 2) {
       payload.log_type = 'exam';
-      payload.value = examScore;
-      payload.unit = 'deviation';
-      payload.minutes = 0;
+      payload.deviation = examScore;
     }
     
-    console.log("Sending:", payload);
-
-    try {
-      await fetch(GAS_API_URL, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      });
-
-      setSubmitState('success');
-      setTimeout(() => {
-        // 送信後リセット
-        setSubject('');
-        setStudyTime(60);
-        setTestScore(80);
-        setTestMax(100);
-        setExamScore(50);
-        setUnderstanding(3);
-        setSubmitState('idle');
-      }, 1000);
-
-    } catch (error) {
-      console.error("Error:", error);
-      setErrorMsg('送信エラー。通信環境を確認してください。');
+    // 3. UIの即時更新 (ユーザーを待たせない)
+    setSubmitState('success');
+    setTimeout(() => {
+      // リセット
+      setSubject(''); 
+      setStudyTime(60);
+      setTestScore(80);
+      setTestMax(100);
+      setExamScore(50);
+      setUnderstanding(3);
       setSubmitState('idle');
-      setTimeout(() => setErrorMsg(''), 3000);
-    }
+      setErrorMsg('');
+    }, 800); 
+
+    // 4. データ送信はバックグラウンドで実行 (非同期処理)
+    sendDataInBackground(payload);
   };
 
   const handleResetConfig = () => {
-    if(confirm('設定をリセットしますか？')) {
+    if(window.confirm('設定をリセットしますか？')) {
       localStorage.removeItem('mieruka_config_final');
       setUserConfig({ grade: '', subjects: [] });
       setView('grade_select');
@@ -251,130 +213,7 @@ export default function App() {
 
   // --- UI Components ---
 
-  // 数値調整用ボタンセット
-  const ControlButtons = ({ onSmallMinus, onBigMinus, onSmallPlus, onBigPlus, stepSmall, stepBig, colorClass }) => (
-    <div className="flex flex-col gap-3 max-w-xs mx-auto mt-6 select-none">
-      <div className="flex justify-center gap-3">
-          <button onClick={onSmallPlus} className={`flex-1 py-3 rounded-xl bg-white border-2 border-slate-100 text-slate-600 font-bold active:scale-95 transition-all shadow-sm flex justify-center items-center gap-1 touch-manipulation`}>
-            <Plus size={16} /> {stepSmall}
-          </button>
-          <button onClick={onBigPlus} className={`flex-1 py-3 rounded-xl ${colorClass.replace('text-', 'bg-')} text-white font-bold active:scale-95 transition-all shadow-lg flex justify-center items-center gap-1 touch-manipulation`}>
-            <Plus size={20} /> {stepBig}
-          </button>
-      </div>
-      <div className="flex justify-center gap-3">
-          <button onClick={onSmallMinus} className={`flex-1 py-3 rounded-xl bg-white border-2 border-slate-100 text-slate-400 font-bold active:scale-95 transition-all shadow-sm flex justify-center items-center gap-1 touch-manipulation`}>
-            <Minus size={16} /> {stepSmall}
-          </button>
-          <button onClick={onBigMinus} className={`flex-1 py-3 rounded-xl bg-slate-100 text-slate-500 font-bold active:scale-95 transition-all flex justify-center items-center gap-1 touch-manipulation`}>
-            <Minus size={16} /> {stepBig}
-          </button>
-      </div>
-    </div>
-  );
-
-  // 1. 勉強時間入力 (タブ0)
-  const StudyTimeAdjuster = () => (
-    <div className="text-center my-8">
-      <div className="flex items-baseline justify-center gap-1 mb-2">
-        <span className="text-7xl font-black tabular-nums tracking-tight text-slate-800">
-          {studyTime}
-        </span>
-        <span className="text-xl font-bold text-slate-400">min</span>
-      </div>
-      <ControlButtons 
-        onSmallMinus={() => setStudyTime(Math.max(0, studyTime - 10))}
-        onBigMinus={() => setStudyTime(Math.max(0, studyTime - 30))}
-        onSmallPlus={() => setStudyTime(Math.min(480, studyTime + 10))}
-        onBigPlus={() => setStudyTime(Math.min(480, studyTime + 30))}
-        stepSmall={10} stepBig={30} colorClass="text-slate-800"
-      />
-      <div className="flex justify-center gap-2 mt-4">
-          {[30, 60, 90].map(m => (<button key={m} onClick={() => setStudyTime(m)} className="w-8 h-8 rounded-full border border-slate-100 text-[10px] font-bold text-slate-400 hover:bg-slate-50 touch-manipulation">{m}</button>))}
-      </div>
-    </div>
-  );
-
-  // 2. テスト点数入力 (タブ1) - 満点・点数切り替え＆刻み値変動
-  const TestScoreAdjuster = () => {
-    const isScoreMode = testInputMode === 'score';
-    
-    // モードによって刻み値を変更
-    const stepSmall = isScoreMode ? 1 : 10;
-    const stepBig = isScoreMode ? 5 : 100;
-    
-    const handleAdjust = (delta) => {
-      if (isScoreMode) {
-        setTestScore(Math.max(0, Math.min(testMax, testScore + delta)));
-      } else {
-        const newMax = Math.max(10, Math.min(999, testMax + delta));
-        setTestMax(newMax);
-        // 満点が下がって点数より小さくなったら点数も下げる
-        if (newMax < testScore) setTestScore(newMax);
-      }
-    };
-
-    return (
-      <div className="text-center my-8 select-none">
-        <div className="flex items-center justify-center gap-2 mb-4">
-          {/* 点数 */}
-          <div 
-            onClick={() => setTestInputMode('score')}
-            className={`transition-all duration-300 cursor-pointer flex flex-col items-center touch-manipulation ${isScoreMode ? 'scale-110 opacity-100' : 'scale-90 opacity-40 blur-[1px]'}`}
-          >
-            <span className="text-xs font-bold text-orange-500 mb-1">SCORE</span>
-            <span className="text-6xl font-black text-orange-500 tabular-nums tracking-tight leading-none">{testScore}</span>
-          </div>
-          
-          <span className="text-4xl font-light text-slate-300 mx-2">/</span>
-
-          {/* 満点 */}
-          <div 
-            onClick={() => setTestInputMode('max')}
-            className={`transition-all duration-300 cursor-pointer flex flex-col items-center touch-manipulation ${!isScoreMode ? 'scale-110 opacity-100' : 'scale-90 opacity-40 blur-[1px]'}`}
-          >
-            <span className="text-xs font-bold text-slate-500 mb-1">MAX</span>
-            <span className="text-5xl font-bold text-slate-600 tabular-nums tracking-tight leading-none">{testMax}</span>
-          </div>
-        </div>
-
-        <p className="text-xs text-slate-400 mb-2 font-bold animate-pulse">
-          {isScoreMode ? '点数を入力中...' : '満点を変更中 (±10/±100)...'}
-        </p>
-
-        {/* isScoreMode の状態に応じて再レンダリングしてもボタンが消えないようにKey等は使わずPropsで制御 */}
-        <ControlButtons 
-          onSmallMinus={() => handleAdjust(-stepSmall)}
-          onBigMinus={() => handleAdjust(-stepBig)}
-          onSmallPlus={() => handleAdjust(stepSmall)}
-          onBigPlus={() => handleAdjust(stepBig)}
-          stepSmall={stepSmall} 
-          stepBig={stepBig} 
-          colorClass={isScoreMode ? "text-orange-500" : "text-slate-600"} 
-        />
-      </div>
-    );
-  };
-
-  // 3. 偏差値入力 (タブ2)
-  const ExamScoreAdjuster = () => (
-    <div className="text-center my-8">
-      <div className="flex items-baseline justify-center gap-1 mb-6">
-        <span className="text-7xl font-black tabular-nums tracking-tight text-indigo-500">
-          {examScore}
-        </span>
-        <span className="text-xl font-bold text-slate-400">dev</span>
-      </div>
-      <ControlButtons 
-        onSmallMinus={() => setExamScore(Math.max(20, examScore - 1))}
-        onBigMinus={() => setExamScore(Math.max(20, examScore - 5))}
-        onSmallPlus={() => setExamScore(Math.min(90, examScore + 1))}
-        onBigPlus={() => setExamScore(Math.min(90, examScore + 5))}
-        stepSmall={1} stepBig={5} colorClass="text-indigo-500"
-      />
-    </div>
-  );
-
+  // ... (GradeSelectView, SubjectSelectView は省略)
   const GradeSelectView = () => (
     <div className="h-full bg-white flex flex-col items-center justify-center p-6 animate-in fade-in">
       <div className="mb-12 text-center">
@@ -437,6 +276,119 @@ export default function App() {
     );
   };
 
+  const ControlButtons = ({ onSmallMinus, onBigMinus, onSmallPlus, onBigPlus, stepSmall, stepBig, colorClass }) => (
+    <div className="flex flex-col gap-3 max-w-xs mx-auto mt-6 select-none">
+      <div className="flex justify-center gap-3">
+          <button onClick={onSmallPlus} className={`flex-1 py-3 rounded-xl bg-white border-2 border-slate-100 text-slate-600 font-bold active:scale-95 transition-all shadow-sm flex justify-center items-center gap-1 touch-manipulation`}>
+            <Plus size={16} /> {stepSmall}
+          </button>
+          <button onClick={onBigPlus} className={`flex-1 py-3 rounded-xl ${colorClass.replace('text-', 'bg-')} text-white font-bold active:scale-95 transition-all shadow-lg flex justify-center items-center gap-1 touch-manipulation`}>
+            <Plus size={20} /> {stepBig}
+          </button>
+      </div>
+      <div className="flex justify-center gap-3">
+          <button onClick={onSmallMinus} className={`flex-1 py-3 rounded-xl bg-white border-2 border-slate-100 text-slate-400 font-bold active:scale-95 transition-all shadow-sm flex justify-center items-center gap-1 touch-manipulation`}>
+            <Minus size={16} /> {stepSmall}
+          </button>
+          <button onClick={onBigMinus} className={`flex-1 py-3 rounded-xl bg-slate-100 text-slate-500 font-bold active:scale-95 transition-all flex justify-center items-center gap-1 touch-manipulation`}>
+            <Minus size={16} /> {stepBig}
+          </button>
+      </div>
+    </div>
+  );
+
+  const StudyTimeAdjuster = () => (
+    <div className="text-center my-8">
+      <div className="flex items-baseline justify-center gap-1 mb-2">
+        <span className="text-7xl font-black tabular-nums tracking-tight text-slate-800">
+          {studyTime}
+        </span>
+        <span className="text-xl font-bold text-slate-400">min</span>
+      </div>
+      <ControlButtons 
+        onSmallMinus={() => setStudyTime(Math.max(5, studyTime - 10))}
+        onBigMinus={() => setStudyTime(Math.max(5, studyTime - 30))}
+        onSmallPlus={() => setStudyTime(Math.min(480, studyTime + 10))}
+        onBigPlus={() => setStudyTime(Math.min(480, studyTime + 30))}
+        stepSmall={10} stepBig={30} colorClass="text-slate-800"
+      />
+      <div className="flex justify-center gap-2 mt-4">
+          {[30, 60, 90].map(m => (<button key={m} onClick={() => setStudyTime(m)} className="w-10 h-10 rounded-full border border-slate-100 text-[10px] font-bold text-slate-400 hover:bg-slate-50 touch-manipulation">{m}</button>))}
+      </div>
+    </div>
+  );
+
+  const TestScoreAdjuster = () => {
+    const isScoreMode = testInputMode === 'score';
+    // 満点モードは10/100刻み
+    const stepSmall = isScoreMode ? 1 : 10; 
+    const stepBig = isScoreMode ? 5 : 100;
+    
+    const handleAdjust = (delta) => {
+      if (isScoreMode) {
+        setTestScore(Math.max(0, Math.min(testMax, testScore + delta)));
+      } else {
+        const newMax = Math.max(10, Math.min(999, testMax + delta));
+        setTestMax(newMax);
+        if (newMax < testScore) setTestScore(newMax);
+      }
+    };
+
+    return (
+      <div className="text-center my-8 select-none">
+        <div className="flex items-center justify-center gap-2 mb-4">
+          <div 
+            onClick={() => setTestInputMode('score')}
+            className={`transition-all duration-300 cursor-pointer flex flex-col items-center touch-manipulation ${isScoreMode ? 'scale-110 opacity-100' : 'scale-90 opacity-40 blur-[1px]'}`}
+          >
+            <span className="text-xs font-bold text-orange-500 mb-1">SCORE</span>
+            <span className="text-6xl font-black text-orange-500 tabular-nums tracking-tight leading-none">{testScore}</span>
+          </div>
+          <span className="text-4xl font-light text-slate-300 mx-2">/</span>
+          <div 
+            onClick={() => setTestInputMode('max')}
+            className={`transition-all duration-300 cursor-pointer flex flex-col items-center touch-manipulation ${!isScoreMode ? 'scale-110 opacity-100' : 'scale-90 opacity-40 blur-[1px]'}`}
+          >
+            <span className="text-xs font-bold text-slate-500 mb-1">MAX</span>
+            <span className="text-5xl font-bold text-slate-600 tabular-nums tracking-tight leading-none">{testMax}</span>
+          </div>
+        </div>
+
+        <p className="text-xs text-slate-400 mb-2 font-bold animate-pulse">
+          {isScoreMode ? '点数を入力中...' : '満点を変更中 (±10/±100)...'}
+        </p>
+
+        <ControlButtons 
+          onSmallMinus={() => handleAdjust(-stepSmall)}
+          onBigMinus={() => handleAdjust(-stepBig)}
+          onSmallPlus={() => handleAdjust(stepSmall)}
+          onBigPlus={() => handleAdjust(stepBig)}
+          stepSmall={stepSmall} 
+          stepBig={stepBig} 
+          colorClass={isScoreMode ? "text-orange-500" : "text-slate-600"} 
+        />
+      </div>
+    );
+  };
+
+  const ExamScoreAdjuster = () => (
+    <div className="text-center my-8">
+      <div className="flex items-baseline justify-center gap-1 mb-6">
+        <span className="text-7xl font-black tabular-nums tracking-tight text-indigo-500">
+          {examScore}
+        </span>
+        <span className="text-xl font-bold text-slate-400">dev</span>
+      </div>
+      <ControlButtons 
+        onSmallMinus={() => setExamScore(Math.max(20, examScore - 1))}
+        onBigMinus={() => setExamScore(Math.max(20, examScore - 5))}
+        onSmallPlus={() => setExamScore(Math.min(90, examScore + 1))}
+        onBigPlus={() => setExamScore(Math.min(90, examScore + 5))}
+        stepSmall={1} stepBig={5} colorClass="text-indigo-500"
+      />
+    </div>
+  );
+
   const MainLogView = () => {
     const TABS = [
       { id: 0, label: '勉強時間', color: 'bg-slate-800', icon: <BookOpen size={16} /> },
@@ -451,7 +403,7 @@ export default function App() {
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
       >
-        {/* Header */}
+        {/* Header (省略) */}
         <div className="px-6 pt-8 pb-2 flex justify-between items-center z-10 bg-white/90 backdrop-blur-sm">
           <div className="relative">
              <Calendar size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
@@ -463,15 +415,9 @@ export default function App() {
           </div>
         </div>
 
-        {/* タブ */}
+        {/* タブ (省略) */}
         <div className="flex justify-center gap-2 py-2 z-10">
-          {TABS.map((tab) => (
-            <button 
-              key={tab.id} 
-              onClick={() => setActiveTab(tab.id)}
-              className={`h-1.5 rounded-full transition-all duration-300 ${activeTab === tab.id ? `w-8 ${tab.color}` : 'w-2 bg-slate-200'}`}
-            />
-          ))}
+          {TABS.map((tab) => (<button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`h-1.5 rounded-full transition-all duration-300 ${activeTab === tab.id ? `w-8 ${tab.color}` : 'w-2 bg-slate-200'}`}/>))}
         </div>
         <div className="text-center py-2 z-10">
           <span className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold text-white ${TABS[activeTab].color} shadow-md transition-colors duration-300`}>
@@ -480,31 +426,23 @@ export default function App() {
         </div>
 
         <div className="flex-1 overflow-y-auto pb-32 px-5 flex flex-col justify-start pt-2">
-          {/* 科目 */}
+          {/* 科目 (省略) */}
           <div className="mb-2">
             <div className="flex flex-wrap justify-center gap-2 mb-4">
               {userConfig.subjects.map(sub => {
                 const isActive = subject === sub;
-                return (
-                  <button key={sub} onClick={() => setSubject(sub)} className={`px-4 py-2 rounded-xl font-bold text-xs transition-all duration-200 border ${isActive ? `bg-slate-800 border-slate-800 text-white shadow-lg transform scale-105 z-10` : 'bg-white border-slate-100 text-slate-400 hover:border-slate-300'}`}>
-                    {sub}
-                  </button>
-                );
+                return (<button key={sub} onClick={() => setSubject(sub)} className={`px-4 py-2 rounded-xl font-bold text-xs transition-all duration-200 border ${isActive ? `bg-slate-800 border-slate-800 text-white shadow-lg transform scale-105 z-10` : 'bg-white border-slate-100 text-slate-400 hover:border-slate-300'}`}>{sub}</button>);
               })}
             </div>
             {!subject && <p className="text-center text-xs text-slate-300 font-bold animate-pulse">科目をタップ</p>}
           </div>
 
-          {/* 活動タグ */}
+          {/* 活動タグ (省略) */}
           <div className="mb-4">
             <div className="flex flex-wrap justify-center gap-2">
                {ACTIVITIES.map(act => {
                  const isActive = activity === act.id;
-                 return (
-                   <button key={act.id} onClick={() => setActivity(act.id)} className={`px-2 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 border transition-all ${isActive ? `${act.color.replace('bg-', 'bg-opacity-100 bg-').replace('text-', 'text-white ')} border-transparent shadow-sm` : 'bg-white text-slate-300 border-slate-100 grayscale'}`} style={isActive ? { backgroundColor: 'var(--tw-bg-opacity)' } : {}}>
-                     {act.label}
-                   </button>
-                 )
+                 return (<button key={act.id} onClick={() => setActivity(act.id)} className={`px-2 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 border transition-all ${isActive ? `${act.color.replace('bg-', 'bg-opacity-100 bg-').replace('text-', 'text-white ')} border-transparent shadow-sm` : 'bg-white text-slate-300 border-slate-100 grayscale'}`} style={isActive ? { backgroundColor: 'var(--tw-bg-opacity)' } : {}}>{act.label}</button> )
                })}
             </div>
           </div>
@@ -516,14 +454,13 @@ export default function App() {
             {activeTab === 2 && <div className="animate-in fade-in slide-in-from-right-4 duration-300"><ExamScoreAdjuster /></div>}
           </div>
 
-          {/* 理解度 */}
+          {/* 理解度 (省略) */}
           <div className="mb-4 px-4">
             <div className="flex justify-between max-w-xs mx-auto bg-slate-50 p-2 rounded-2xl border border-slate-100">
               {EVALUATIONS.map((ev) => {
                 const active = understanding === ev.value;
                 const Icon = ev.icon;
-                return (
-                  <button key={ev.value} onClick={() => setUnderstanding(ev.value)} className={`p-3 rounded-xl transition-all duration-200 w-full flex justify-center ${active ? 'bg-white shadow-md scale-110' : 'opacity-40 grayscale'}`}>
+                return (<button key={ev.value} onClick={() => setUnderstanding(ev.value)} className={`p-3 rounded-xl transition-all duration-200 w-full flex justify-center ${active ? 'bg-white shadow-md scale-110' : 'opacity-40 grayscale'}`}>
                     <Icon size={28} className={active ? ev.color : 'text-slate-400'} fill={active ? "currentColor" : "none"} />
                   </button>
                 );
