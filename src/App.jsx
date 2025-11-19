@@ -93,7 +93,7 @@ export default function App() {
       const script = document.createElement('script');
       script.id = 'liff-sdk';
       script.src = 'https://static.line-scdn.net/liff/edge/2/sdk.js';
-      script.onload = () => {
+      script.onload = async () => {
         if (window.liff) {
           window.liff.init({ liffId: LIFF_ID })
             .then(() => {
@@ -117,17 +117,16 @@ export default function App() {
     }
   }, []);
 
-  // --- 誤動作しないスワイプ処理 ---
+  // --- スワイプ処理 ---
   const touchStartX = useRef(null);
   const touchStartY = useRef(null);
   const touchEndX = useRef(null);
   const touchEndY = useRef(null);
-  const MIN_SWIPE_DISTANCE = 50; // この距離以上動かないとスワイプとみなさない
+  const MIN_SWIPE_DISTANCE = 50;
 
   const handleTouchStart = (e) => {
     touchStartX.current = e.targetTouches[0].clientX;
     touchStartY.current = e.targetTouches[0].clientY;
-    // タッチ開始時に終了座標をリセット（超重要：これがタップ誤動作を防ぐ）
     touchEndX.current = null;
     touchEndY.current = null;
   };
@@ -143,19 +142,14 @@ export default function App() {
     const distanceX = touchStartX.current - touchEndX.current;
     const distanceY = touchStartY.current - touchEndY.current;
     
-    // 横方向の移動が閾値を超えていて、かつ縦方向の移動よりも大きい場合のみスワイプとみなす
-    // (斜めスクロールや縦スクロール時の誤動作防止)
     if (Math.abs(distanceX) > MIN_SWIPE_DISTANCE && Math.abs(distanceX) > Math.abs(distanceY)) {
        if (distanceX > 0) {
-         // 左スワイプ -> 次へ
          if (activeTab < 2) setActiveTab(activeTab + 1);
        } else {
-         // 右スワイプ -> 前へ
          if (activeTab > 0) setActiveTab(activeTab - 1);
        }
     }
     
-    // リセット
     touchStartX.current = null;
     touchEndX.current = null;
   };
@@ -183,7 +177,6 @@ export default function App() {
 
     setSubmitState('submitting');
 
-    // 送信データの作成 (タブによって内容を変える)
     let payload = {
       line_user_id: liffUserId || 'guest_user',
       grade: userConfig.grade,
@@ -225,7 +218,6 @@ export default function App() {
 
       setSubmitState('success');
       setTimeout(() => {
-        // 送信後リセット
         setSubject('');
         setStudyTime(60);
         setTestScore(80);
@@ -255,7 +247,7 @@ export default function App() {
 
   // 数値調整用ボタンセット
   const ControlButtons = ({ onSmallMinus, onBigMinus, onSmallPlus, onBigPlus, stepSmall, stepBig, colorClass }) => (
-    <div className="flex flex-col gap-3 max-w-xs mx-auto mt-6">
+    <div className="flex flex-col gap-3 max-w-xs mx-auto mt-6 select-none">
       <div className="flex justify-center gap-3">
           <button onClick={onSmallPlus} className={`flex-1 py-3 rounded-xl bg-white border-2 border-slate-100 text-slate-600 font-bold active:scale-95 transition-all shadow-sm flex justify-center items-center gap-1 touch-manipulation`}>
             <Plus size={16} /> {stepSmall}
@@ -297,23 +289,29 @@ export default function App() {
     </div>
   );
 
-  // 2. テスト点数入力 (タブ1) - タップでフォーカス切り替え
+  // 2. テスト点数入力 (タブ1) - 満点・点数切り替え＆刻み値変動
   const TestScoreAdjuster = () => {
     const isScoreMode = testInputMode === 'score';
+    
+    // モードによって刻み値を変更
+    const stepSmall = isScoreMode ? 1 : 10;
+    const stepBig = isScoreMode ? 5 : 100;
     
     const handleAdjust = (delta) => {
       if (isScoreMode) {
         setTestScore(Math.max(0, Math.min(testMax, testScore + delta)));
       } else {
-        setTestMax(Math.max(10, testMax + delta));
-        if (testMax + delta < testScore) setTestScore(testMax + delta);
+        const newMax = Math.max(10, Math.min(999, testMax + delta));
+        setTestMax(newMax);
+        // 満点が下がって点数より小さくなったら点数も下げる
+        if (newMax < testScore) setTestScore(newMax);
       }
     };
 
     return (
       <div className="text-center my-8 select-none">
         <div className="flex items-center justify-center gap-2 mb-4">
-          {/* 点数 (タップ可能) */}
+          {/* 点数 */}
           <div 
             onClick={() => setTestInputMode('score')}
             className={`transition-all duration-300 cursor-pointer flex flex-col items-center touch-manipulation ${isScoreMode ? 'scale-110 opacity-100' : 'scale-90 opacity-40 blur-[1px]'}`}
@@ -324,7 +322,7 @@ export default function App() {
           
           <span className="text-4xl font-light text-slate-300 mx-2">/</span>
 
-          {/* 満点 (タップ可能) */}
+          {/* 満点 */}
           <div 
             onClick={() => setTestInputMode('max')}
             className={`transition-all duration-300 cursor-pointer flex flex-col items-center touch-manipulation ${!isScoreMode ? 'scale-110 opacity-100' : 'scale-90 opacity-40 blur-[1px]'}`}
@@ -335,15 +333,18 @@ export default function App() {
         </div>
 
         <p className="text-xs text-slate-400 mb-2 font-bold animate-pulse">
-          {isScoreMode ? '点数を入力中...' : '満点を変更中...'}
+          {isScoreMode ? '点数を入力中...' : '満点を変更中 (±10/±100)...'}
         </p>
 
+        {/* isScoreMode の状態に応じて再レンダリングしてもボタンが消えないようにKey等は使わずPropsで制御 */}
         <ControlButtons 
-          onSmallMinus={() => handleAdjust(-1)}
-          onBigMinus={() => handleAdjust(-5)}
-          onSmallPlus={() => handleAdjust(1)}
-          onBigPlus={() => handleAdjust(5)}
-          stepSmall={1} stepBig={5} colorClass={isScoreMode ? "text-orange-500" : "text-slate-500"}
+          onSmallMinus={() => handleAdjust(-stepSmall)}
+          onBigMinus={() => handleAdjust(-stepBig)}
+          onSmallPlus={() => handleAdjust(stepSmall)}
+          onBigPlus={() => handleAdjust(stepBig)}
+          stepSmall={stepSmall} 
+          stepBig={stepBig} 
+          colorClass={isScoreMode ? "text-orange-500" : "text-slate-600"} 
         />
       </div>
     );
